@@ -1,17 +1,23 @@
 import zmq
-from db_manager import DBManager 
+import time
+from db_manager import DBManager
 
 class CentralServer:
     def __init__(self, db):
-        self.db = db  # Conexión a la base de datos
-        self.taxi_ips = {}  # Diccionario para almacenar la IP de cada taxi
+        self.db = db
+        self.taxi_ips = {}
 
     def receive_positions(self):
-        """Recibir posiciones de taxis a través de ZeroMQ y actualizar la base de datos."""
         context = zmq.Context()
         socket = context.socket(zmq.SUB)
-        socket.bind("tcp://*:5556")
-        
+
+        # Conectar inicialmente al broker principal
+        connected = self.connect_to_broker(socket, "tcp://localhost:5556", "tcp://localhost:5559")
+
+        if not connected:
+            print("No se pudo conectar ni al broker principal ni al de respaldo. Terminando.")
+            return
+
         # Suscribirse a todos los mensajes de taxis
         socket.setsockopt_string(zmq.SUBSCRIBE, "Taxi")
 
@@ -21,49 +27,67 @@ class CentralServer:
                 print(f"Posición recibida: {message}")
                 taxi_id, x, y, taxi_ip = self.process_message(message)
 
-                # Guardar la IP del taxi
                 self.taxi_ips[taxi_id] = taxi_ip
-
-                # Actualizar la posición del taxi en la base de datos
                 self.db.update_taxi_position(taxi_id, x, y)
-
                 print(f"Taxis actualizados en la base de datos: Taxi {taxi_id} está en ({x}, {y})")
-
-                # Intentar asignar un taxi (simulación FIFO)
                 self.assign_taxi()
 
+            except zmq.ZMQError as e:
+                print(f"Error en la comunicación: {e}")
+                # Intentar reconectar si se pierde la conexión
+                connected = self.connect_to_broker(socket, "tcp://localhost:5556", "tcp://localhost:5559")
+                if not connected:
+                    print("No se pudo reconectar a ningún broker. Terminando.")
+                    break
             except KeyboardInterrupt:
                 print("Servicio central detenido.")
                 break
 
+    def connect_to_broker(self, socket, broker_main, broker_backup):
+        """Intentar conectar al broker principal y luego al de respaldo si el primero falla."""
+        max_retries = 5
+        backoff_time = 1
+
+        for attempt in range(max_retries):
+            try:
+                print(f"Intentando conectar al broker principal (intento {attempt + 1})")
+                socket.connect(broker_main)
+                print("Conectado al broker principal.")
+                return True
+            except zmq.ZMQError:
+                print("Fallo al conectar al broker principal, intentando el de respaldo...")
+                try:
+                    socket.connect(broker_backup)
+                    print("Conectado al broker de respaldo.")
+                    return True
+                except zmq.ZMQError:
+                    print(f"Fallo en la reconexión. Reintentando en {backoff_time} segundos...")
+                    time.sleep(backoff_time)
+                    backoff_time *= 2
+
+        print("Error: no se pudo conectar ni al broker principal ni al de respaldo.")
+        return False
+
     def process_message(self, message):
         """Procesar el mensaje recibido para extraer taxi_id, x, y, y la IP."""
-        print(f"Mensaje crudo: {message}")  # Imprimir para depurar el formato del mensaje
+        print(f"Mensaje crudo: {message}")
 
-        # Asumimos que el mensaje tiene el formato 'Taxi <id> en la posición (<x>, <y>), IP: <ip>'
-        parts = message.split()  # Dividir por espacios
-        taxi_id = int(parts[1])  # Extraer el ID del taxi
+        parts = message.split()
+        taxi_id = int(parts[1])
 
-        # Encontrar la posición, que está entre paréntesis
         position_str = message[message.find("("):message.find(")") + 1]
 
-        print(f"Cadena de posición: {position_str}")  # Debug para la cadena de posición
+        print(f"Cadena de posición: {position_str}")
 
         if position_str.startswith('(') and position_str.endswith(')'):
-            # Quitar los paréntesis y dividir la posición en x e y
-            position_str = position_str[1:-1]  # Eliminar '(' y ')'
+            position_str = position_str[1:-1]
             position = position_str.split(',')
-
             if len(position) != 2:
                 raise ValueError(f"Formato de posición no válido: {position_str}")
 
-            # Convertir a enteros
             x, y = int(position[0].strip()), int(position[1].strip())
-            
-            # Extraer la IP que está después de 'IP: '
-            ip_part = message.split("IP: ")[1].strip()  # Obtener la IP del taxi
+            ip_part = message.split("IP: ")[1].strip()
             print(f"IP del taxi: {ip_part}")
-            
             return taxi_id, x, y, ip_part
         else:
             raise ValueError(f"La parte de la posición del mensaje no está correctamente formateada: {position_str}")
@@ -71,31 +95,22 @@ class CentralServer:
     def assign_taxi(self):
         """Asignar el primer taxi disponible siguiendo el principio FIFO."""
         taxis = self.db.get_all_taxis()
-
-        # Imprimir los taxis disponibles para depuración
         print("Lista de taxis obtenidos de la base de datos:")
         for taxi in taxis:
             print(taxi)
 
         nearest_taxi = None
-
-        # Buscar el primer taxi disponible que no esté ocupado
         for taxi in taxis:
-            taxi_id, x, y, status = taxi  # Asegúrate de que el estado es parte del retorno
+            taxi_id, x, y, status = taxi
             if status == 'available':
                 nearest_taxi = (taxi_id, x, y)
-                break  # Encontramos el primer taxi disponible, salimos del loop
+                break
 
         if nearest_taxi:
             taxi_id = nearest_taxi[0]
             print(f"Taxi {taxi_id} asignado al usuario (FIFO).")
-            
-            # Cambiar el estado del taxi a 'busy'
             self.db.update_taxi_status(taxi_id, 'busy')
-
-            # Notificar al taxi que ha sido asignado
             self.notify_taxi(taxi_id)
-
             return nearest_taxi
         else:
             print("No hay taxis disponibles.")
@@ -107,7 +122,7 @@ class CentralServer:
             taxi_ip = self.taxi_ips[taxi_id]
             context = zmq.Context()
             socket = context.socket(zmq.PUB)
-            socket.connect(f"tcp://{taxi_ip}:5557")  # El taxi debe estar escuchando en este puerto
+            socket.connect(f"tcp://{taxi_ip}:5557")
 
             message = f"Taxi {taxi_id}, estás ocupado."
             socket.send_string(message)
@@ -116,10 +131,10 @@ class CentralServer:
             print(f"No se encontró la IP del taxi {taxi_id}.")
 
 if __name__ == "__main__":
-    db = DBManager()  # Crear la conexión a la base de datos
+    db = DBManager()
     server = CentralServer(db=db)
-    
+
     try:
-        server.receive_positions()  # Escuchar las posiciones de los taxis
+        server.receive_positions()
     finally:
-        db.close()  # Cerrar la conexión a la base de datos
+        db.close()

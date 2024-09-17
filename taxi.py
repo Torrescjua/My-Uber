@@ -9,16 +9,13 @@ from db_manager import DBManager
 class Taxi:
     def __init__(self, city_graph, db):
         self.city_graph = city_graph
-        self.db = db  # Conexión a la base de datos
-        # Comenzar en un nodo aleatorio dentro de la ciudad
+        self.db = db
         self.current_node = city_graph.get_node(random.randint(0, city_graph.n - 1),
                                                 random.randint(0, city_graph.m - 1))
-        # Insertar el taxi en la base de datos con la posición inicial y obtener el taxi_id generado
         self.taxi_id = self.db.add_taxi(self.current_node.x, self.current_node.y)
         print(f"Taxi creado con ID: {self.taxi_id}")
-        
         self.local_ip = self.get_local_ip()
-        
+
     def get_local_ip(self):
         """Obtener la IP local del taxi."""
         hostname = socket.gethostname()
@@ -29,33 +26,67 @@ class Taxi:
         """Mover el taxi a un nodo vecino aleatorio."""
         if self.current_node and self.current_node.neighbors:
             self.current_node = random.choice(self.current_node.neighbors)
-            # Actualizar la posición del taxi en la base de datos
             self.db.update_taxi_position(self.taxi_id, self.current_node.x, self.current_node.y)
         print(f"Taxi {self.taxi_id} se movió a {self.current_node.get_position()}")
 
     def get_position(self):
-        """Obtener la posición actual del taxi."""
         return self.current_node.get_position()
 
     def publish_position(self):
-        """Publicar la posición del taxi en el servidor central usando ZeroMQ."""
+        """Publicar la posición del taxi usando ZeroMQ con tolerancia a fallos."""
         context = zmq.Context()
         socket = context.socket(zmq.PUB)
-        socket.connect("tcp://localhost:5556")
 
+        # Intentar conectarse al broker principal
+        connected = self.connect_to_broker(socket, "tcp://localhost:5555", "tcp://localhost:5558")
+        if not connected:
+            print("No se pudo conectar ni al broker principal ni al de respaldo. Terminando.")
+            return
 
         while True:
-            self.move()  # Mover el taxi a una nueva posición
-            message = f"Taxi {self.taxi_id} en la posición {self.get_position()}, IP: {self.local_ip}"
-            print(f"Publicando: {message}")
-            socket.send_string(message)
-            time.sleep(2)
-            
+            try:
+                self.move()
+                message = f"Taxi {self.taxi_id} en la posición {self.get_position()}, IP: {self.local_ip}"
+                print(f"Publicando: {message}")
+                socket.send_string(message)
+                time.sleep(5)
+            except zmq.ZMQError as e:
+                print(f"Error en la comunicación: {e}")
+                connected = self.connect_to_broker(socket, "tcp://localhost:5555", "tcp://localhost:5558")
+                if not connected:
+                    print("No se pudo reconectar a ningún broker. Terminando.")
+                    break
+
+    def connect_to_broker(self, socket, broker_main, broker_backup):
+        """Intentar conectar al broker principal y luego al de respaldo si falla."""
+        max_retries = 5
+        backoff_time = 1
+
+        for attempt in range(max_retries):
+            try:
+                print(f"Intentando conectar al broker principal (intento {attempt + 1})")
+                socket.connect(broker_main)
+                print("Conectado al broker principal.")
+                return True
+            except zmq.ZMQError:
+                print("Fallo al conectar al broker principal, intentando el de respaldo...")
+                try:
+                    socket.connect(broker_backup)
+                    print("Conectado al broker de respaldo.")
+                    return True
+                except zmq.ZMQError:
+                    print(f"Fallo en la reconexión. Reintentando en {backoff_time} segundos...")
+                    time.sleep(backoff_time)
+                    backoff_time *= 2
+
+        print("Error: no se pudo conectar ni al broker principal ni al de respaldo.")
+        return False
+
     def listen_for_assignment(self):
         """Escuchar asignaciones del servidor central usando ZeroMQ."""
         context = zmq.Context()
         socket = context.socket(zmq.SUB)
-        socket.connect(f"tcp://{self.local_ip}:5557")  # El taxi escucha en su propio puerto
+        socket.connect("tcp://localhost:5557")
         socket.setsockopt_string(zmq.SUBSCRIBE, f"Taxi {self.taxi_id}")
 
         print(f"Taxi {self.taxi_id} está esperando asignaciones...")
@@ -67,31 +98,25 @@ class Taxi:
 
 
 if __name__ == "__main__":
-    city_graph = CityGraph(n=8, m=10)  # Crear un gráfico de la ciudad
-    db = DBManager()  # Crear una conexión con la base de datos PostgreSQL
+    city_graph = CityGraph(n=8, m=10)
+    db = DBManager()
 
     taxi = Taxi(city_graph=city_graph, db=db)
 
     try:
-        # Crear un hilo para publicar la posición del taxi
         position_thread = threading.Thread(target=taxi.publish_position)
-        position_thread.daemon = True  # Hilo daemon
+        position_thread.daemon = True
         position_thread.start()
 
-        # Crear un hilo para escuchar las asignaciones del servidor central
         listen_thread = threading.Thread(target=taxi.listen_for_assignment)
-        listen_thread.daemon = True  # Hilo daemon
+        listen_thread.daemon = True
         listen_thread.start()
 
-        # Mantener el programa principal corriendo
         while True:
-            time.sleep(1)  # El programa principal permanece activo
+            time.sleep(1)
 
     except KeyboardInterrupt:
         print("Servicio detenido manualmente.")
     finally:
-        # Cambiar el estado del taxi a 'inactive' antes de cerrar
         db.update_taxi_status(taxi.taxi_id, 'inactive')
         db.close()
-
-
