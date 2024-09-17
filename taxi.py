@@ -46,9 +46,12 @@ if __name__ == "__main__":
     db = DBManager()  # Crear una conexión con la base de datos PostgreSQL
 
     taxi = Taxi(city_graph=city_graph, db=db)
-    
-    # Simular y publicar la posición del taxi
+
     try:
         taxi.publish_position()
+    except KeyboardInterrupt:
+        print("Servicio detenido manualmente.")
     finally:
-        db.close()  # Cerrar la conexión a la base de datos cuando se termine
+        # Cambiar el estado del taxi a 'inactive' antes de cerrar
+        db.update_taxi_status(taxi.taxi_id, 'inactive')
+        db.close()
