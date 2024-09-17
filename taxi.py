@@ -41,21 +41,21 @@ class Taxi:
         """Publicar la posición del taxi en el servidor central usando ZeroMQ."""
         context = zmq.Context()
         socket = context.socket(zmq.PUB)
-        socket.connect("tcp://localhost:5556")
-
+        socket.connect("tcp://localhost:5556")  # Ajustar IP si el servidor no está localmente
 
         while True:
             self.move()  # Mover el taxi a una nueva posición
             message = f"Taxi {self.taxi_id} en la posición {self.get_position()}, IP: {self.local_ip}"
             print(f"Publicando: {message}")
             socket.send_string(message)
-            time.sleep(2)
+            time.sleep(5)
             
     def listen_for_assignment(self):
         """Escuchar asignaciones del servidor central usando ZeroMQ."""
         context = zmq.Context()
         socket = context.socket(zmq.SUB)
-        socket.connect(f"tcp://{self.local_ip}:5557")  # El taxi escucha en su propio puerto
+        socket.connect("tcp://localhost:5557")
+
         socket.setsockopt_string(zmq.SUBSCRIBE, f"Taxi {self.taxi_id}")
 
         print(f"Taxi {self.taxi_id} está esperando asignaciones...")
@@ -93,5 +93,3 @@ if __name__ == "__main__":
         # Cambiar el estado del taxi a 'inactive' antes de cerrar
         db.update_taxi_status(taxi.taxi_id, 'inactive')
         db.close()
-
-
