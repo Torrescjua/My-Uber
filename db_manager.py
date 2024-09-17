@@ -114,6 +114,15 @@ class DBManager:
         ''', (status, taxi_id))
         self.conn.commit()
         print(f"Estado del taxi {taxi_id} actualizado a {status}")
+        
+    def get_all_taxis(self):
+        """Obtener todos los taxis de la base de datos con su posición y estado."""
+        self.cursor.execute('''
+            SELECT taxi_id, x, y, status
+            FROM taxis
+        ''')
+        taxis = self.cursor.fetchall()
+        return taxis
 
     def close(self):
         """Close the connection to the database."""
