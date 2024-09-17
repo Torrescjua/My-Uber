@@ -105,6 +105,16 @@ class DBManager:
         ''', (taxi_id,))
         return self.cursor.fetchone()
 
+    def update_taxi_status(self, taxi_id, status):
+        """Update the status of a taxi in the database (active, inactive, deleted)."""
+        self.cursor.execute('''
+            UPDATE taxis
+            SET status = %s
+            WHERE taxi_id = %s
+        ''', (status, taxi_id))
+        self.conn.commit()
+        print(f"Estado del taxi {taxi_id} actualizado a {status}")
+
     def close(self):
         """Close the connection to the database."""
         self.conn.close()
