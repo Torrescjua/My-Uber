@@ -9,8 +9,8 @@ class CentralServer:
         """Recibir posiciones de taxis a través de ZeroMQ y actualizar la base de datos."""
         context = zmq.Context()
         socket = context.socket(zmq.SUB)
-        socket.connect("tcp://localhost:5556")  # Conectar al canal de publicación de taxis
-
+        socket.bind("tcp://*:5556")
+        
         # Suscribirse a todos los mensajes de taxis
         socket.setsockopt_string(zmq.SUBSCRIBE, "Taxi")
 

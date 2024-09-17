@@ -31,7 +31,8 @@ class Taxi:
         """Publicar la posición del taxi en el servidor central usando ZeroMQ."""
         context = zmq.Context()
         socket = context.socket(zmq.PUB)
-        socket.bind("tcp://*:5556")  # Dirección para publicar la posición
+        socket.connect("tcp://10.43.101.185:5556")
+
 
         while True:
             self.move()  # Mover el taxi a una nueva posición
