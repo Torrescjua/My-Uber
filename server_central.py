@@ -5,6 +5,8 @@ class CentralServer:
     def __init__(self, db):
         self.db = db
         self.taxi_ips = {}
+        self.db = db
+        self.taxi_ips = {}
 
     def receive_positions(self):
         """Recibir posiciones de taxis desde múltiples Brokers usando ZeroMQ con tópicos."""
@@ -41,6 +43,13 @@ class CentralServer:
 
                 self.assign_taxi()
 
+            except zmq.ZMQError as e:
+                print(f"Error en la comunicación: {e}")
+                # Intentar reconectar si se pierde la conexión
+                connected = self.connect_to_broker(socket, "tcp://localhost:5556", "tcp://localhost:5559")
+                if not connected:
+                    print("No se pudo reconectar a ningún broker. Terminando.")
+                    break
             except KeyboardInterrupt:
                 print("Servicio central detenido.")
                 break
@@ -84,6 +93,7 @@ class CentralServer:
         nearest_taxi = None
         for taxi in taxis:
             taxi_id, x, y, status = taxi
+            taxi_id, x, y, status = taxi
             if status == 'available':
                 nearest_taxi = (taxi_id, x, y)
                 break
@@ -117,9 +127,13 @@ class CentralServer:
 
 if __name__ == "__main__":
     db = DBManager()
+    db = DBManager()
     server = CentralServer(db=db)
+
 
     try:
         server.receive_positions()
+        server.receive_positions()
     finally:
+        db.close()
         db.close()

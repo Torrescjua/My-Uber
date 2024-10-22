@@ -16,6 +16,7 @@ class Taxi:
         print(f"Taxi creado con ID: {self.taxi_id}")
         self.local_ip = self.get_local_ip()
 
+
     def get_local_ip(self):
         """Obtener la IP local del taxi."""
         hostname = socket.gethostname()
@@ -30,7 +31,6 @@ class Taxi:
         print(f"Taxi {self.taxi_id} se movió a {self.current_node.get_position()}")
 
     def get_position(self):
-        """Obtener la posición actual del taxi."""
         return self.current_node.get_position()
 
     def publish_position(self):
@@ -87,27 +87,30 @@ class Taxi:
 if __name__ == "__main__":
     city_graph = CityGraph(n=8, m=10)
     db = DBManager()
+    city_graph = CityGraph(n=8, m=10)
+    db = DBManager()
 
     taxi = Taxi(city_graph=city_graph, db=db)
 
     try:
-        # Crear un hilo para publicar la posición del taxi
         position_thread = threading.Thread(target=taxi.publish_position)
+        position_thread.daemon = True
         position_thread.daemon = True
         position_thread.start()
 
         # Crear un hilo para escuchar las asignaciones
         listen_thread = threading.Thread(target=taxi.listen_for_assignment)
         listen_thread.daemon = True
+        listen_thread.daemon = True
         listen_thread.start()
 
         # Mantener el programa principal activo
         while True:
             time.sleep(1)
+            time.sleep(1)
 
     except KeyboardInterrupt:
         print("Servicio detenido manualmente.")
     finally:
-        # Cambiar el estado del taxi a 'inactive' antes de cerrar
         db.update_taxi_status(taxi.taxi_id, 'inactive')
         db.close()
