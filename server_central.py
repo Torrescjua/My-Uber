@@ -51,17 +51,16 @@ class CentralServer:
 
         if position_str.startswith('(') and position_str.endswith(')'):
             # Quitar los paréntesis y dividir la posición en x e y
-            position_str = position_str[1:-1]  # Eliminar '(' y ')'
+            position_str = position_str[1:-1]
             position = position_str.split(',')
 
             if len(position) != 2:
                 raise ValueError(f"Formato de posición no válido: {position_str}")
 
-            # Convertir a enteros
             x, y = int(position[0].strip()), int(position[1].strip())
             
             # Extraer la IP que está después de 'IP: '
-            ip_part = message.split("IP: ")[1].strip()  # Obtener la IP del taxi
+            ip_part = message.split("IP: ")[1].strip()
             print(f"IP del taxi: {ip_part}")
             
             return taxi_id, x, y, ip_part
@@ -81,11 +80,11 @@ class CentralServer:
 
         # Buscar el primer taxi disponible que no esté ocupado
         for taxi in taxis:
-            taxi_id, x, y, status = taxi  # Asegúrate de que el estado es parte del retorno
+            taxi_id, x, y, status = taxi
             if status == 'available':
                 nearest_taxi = (taxi_id, x, y)
-                break  # Encontramos el primer taxi disponible, salimos del loop
-
+                break
+            
         if nearest_taxi:
             taxi_id = nearest_taxi[0]
             print(f"Taxi {taxi_id} asignado al usuario (FIFO).")

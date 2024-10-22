@@ -5,7 +5,7 @@ class CityGraph:
         """Initialize the city grid as a graph with n rows and m columns."""
         self.n = n
         self.m = m
-        self.nodes = {}  # Dictionary to store the nodes, keys are (x, y) positions
+        self.nodes = {}
         self.build_graph()
 
     def build_graph(self):
