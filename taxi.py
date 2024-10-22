@@ -39,8 +39,8 @@ class Taxi:
 
         # Lista de direcciones de los Brokers
         broker_addresses = [
-            "tcp://localhost:5559",  # Primer Broker
-            "tcp://localhost:5561"   # Segundo Broker (redundante)
+            "tcp://10.43.101.52:5559",  # Broker 1
+            "tcp://10.43.101.69:5559"   # Broker 2
         ]
 
         socket = context.socket(zmq.PUB)
@@ -67,8 +67,8 @@ class Taxi:
 
         # Lista de direcciones de los Brokers
         broker_addresses = [
-            "tcp://localhost:5560",  # Primer Broker
-            "tcp://localhost:5562"   # Segundo Broker (redundante)
+            "tcp://10.43.101.52:5560",  # Broker 1
+            "tcp://10.43.101.69:5560"   # Broker 2
         ]
 
         # Conectar a todos los Brokers
@@ -87,26 +87,21 @@ class Taxi:
 if __name__ == "__main__":
     city_graph = CityGraph(n=8, m=10)
     db = DBManager()
-    city_graph = CityGraph(n=8, m=10)
-    db = DBManager()
 
     taxi = Taxi(city_graph=city_graph, db=db)
 
     try:
         position_thread = threading.Thread(target=taxi.publish_position)
         position_thread.daemon = True
-        position_thread.daemon = True
         position_thread.start()
 
         # Crear un hilo para escuchar las asignaciones
         listen_thread = threading.Thread(target=taxi.listen_for_assignment)
         listen_thread.daemon = True
-        listen_thread.daemon = True
         listen_thread.start()
 
         # Mantener el programa principal activo
         while True:
-            time.sleep(1)
             time.sleep(1)
 
     except KeyboardInterrupt:

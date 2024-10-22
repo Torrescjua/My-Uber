@@ -4,13 +4,16 @@ import threading
 def start_broker():
     context = zmq.Context()
 
+    # Dirección IP del Broker 1
+    broker_ip = "10.43.101.52"
+
     # Socket para recibir de los publicadores
     frontend = context.socket(zmq.XSUB)
-    frontend.bind("tcp://*:5559")
+    frontend.bind(f"tcp://{broker_ip}:5559")
 
     # Socket para enviar a los suscriptores
     backend = context.socket(zmq.XPUB)
-    backend.bind("tcp://*:5560")
+    backend.bind(f"tcp://{broker_ip}:5560")
 
     zmq.proxy(frontend, backend)
 
